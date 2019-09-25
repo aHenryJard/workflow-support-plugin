@@ -30,9 +30,13 @@ import hudson.model.FreeStyleProject;
 import hudson.model.Messages;
 import hudson.model.ParametersDefinitionProperty;
 import hudson.model.Result;
+
+import java.util.List;
 import java.util.regex.Pattern;
 
 import hudson.model.StringParameterDefinition;
+import hudson.model.queue.QueueTaskFuture;
+import hudson.triggers.Trigger;
 import jenkins.plugins.git.GitSampleRepoRule;
 import org.hamcrest.Matcher;
 import org.hamcrest.core.SubstringMatcher;
@@ -50,6 +54,11 @@ import org.jvnet.hudson.test.Issue;
 import org.jvnet.hudson.test.JenkinsRule;
 import org.jvnet.hudson.test.MockFolder;
 import org.jvnet.hudson.test.RestartableJenkinsRule;
+import org.kohsuke.stapler.export.CustomExportedBean;
+import org.kohsuke.stapler.export.Exported;
+import org.kohsuke.stapler.export.ExportedBean;
+import net.sf.json.JSONArray;
+import net.sf.json.JSONObject;
 
 @Issue("JENKINS-26834")
 public class RunWrapperTest {
@@ -308,6 +317,65 @@ public class RunWrapperTest {
             }
         });
     }
+
+
+    @Test
+    public void customCauseWithJsonFieldCanBeUsedOnPipelines(){
+
+        r.addStep(new Statement() {
+            @Override
+            public void evaluate() throws Throwable {
+
+                // GIVEN a job with a custom cause with a json field
+                String embeddedJson = "{ source: 'github', optional: 'hello' }";
+                WorkflowJob job = r.j.createProject(WorkflowJob.class, "my-workflow");
+
+                job.setDefinition(new CpsFlowDefinition("echo currentBuild.getBuildCauses().toString()\n"
+                                                        + "assert currentBuild.getBuildCauses().size() == 1\n"
+                                                        + "echo currentBuild.getBuildCauses()[0]\n",
+                                                        true));
+
+                //WHEN the build run THEN it succeed
+                r.j.assertBuildStatusSuccess(job.scheduleBuild2(0,new CauseAction(new CustomCauseWithJson(embeddedJson))));
+
+
+                // GIVEN a job with a custom cause with a json field, including a null
+                String embeddedJsonWithNull = "{ source: 'bitbucket', optional: 'null' }";
+
+                //WHEN the build run THEN it succeed
+                r.j.assertBuildStatusSuccess(job.scheduleBuild2(0,
+                                                                new CauseAction(new CustomCauseWithJson(embeddedJsonWithNull))));
+
+
+            }
+        });
+
+    }
+
+    public static class CustomCauseWithJson extends Cause implements CustomExportedBean {
+
+        private String event;
+
+        public CustomCauseWithJson(String jsonEvent){
+            event = jsonEvent;
+        }
+
+        @Override
+        public String getShortDescription() {
+            return "Custom class";
+        }
+
+        @Exported(visibility = 3)
+        public JSONObject getEvent() {
+            return JSONObject.fromObject(event);
+        }
+
+        @Override
+        public Object toExportedObject() {
+            return JSONObject.fromObject(this).toString();
+        }
+    }
+
 
     // Like org.hamcrest.text.MatchesPattern.matchesPattern(String) but doing a substring, not whole-string, match:
     private static Matcher<String> containsRegexp(final String rx) {

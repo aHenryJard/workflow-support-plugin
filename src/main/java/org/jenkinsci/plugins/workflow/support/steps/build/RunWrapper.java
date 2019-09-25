@@ -25,9 +25,12 @@
 package org.jenkinsci.plugins.workflow.support.steps.build;
 
 import hudson.AbortException;
+import hudson.PluginWrapper;
 import hudson.model.AbstractBuild;
+import hudson.model.Action;
 import hudson.model.Cause;
 import hudson.model.CauseAction;
+import hudson.model.Item;
 import hudson.model.Result;
 import hudson.model.Run;
 import hudson.model.TaskListener;
@@ -45,14 +48,20 @@ import java.util.Map;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 
+import jenkins.model.Jenkins;
 import jenkins.scm.RunWithSCM;
 import net.sf.json.JSONArray;
+import net.sf.json.JSONNull;
 import net.sf.json.JSONObject;
 import org.jenkinsci.plugins.scriptsecurity.sandbox.whitelists.Whitelisted;
 import org.jenkinsci.plugins.workflow.support.actions.EnvironmentAction;
 import org.kohsuke.stapler.export.DataWriter;
+import org.kohsuke.stapler.export.ExportConfig;
+import org.kohsuke.stapler.export.ExportInterceptor;
 import org.kohsuke.stapler.export.Model;
 import org.kohsuke.stapler.export.ModelBuilder;
+import org.kohsuke.stapler.export.Property;
+
 import static org.kohsuke.stapler.export.Flavor.JSON;
 
 /**
@@ -143,7 +152,8 @@ public final class RunWrapper implements Serializable {
         for(Cause cause : build().getCauses()) {
             StringWriter w = new StringWriter();
             CauseAction causeAction = new CauseAction(cause);
-            DataWriter writer = JSON.createDataWriter(causeAction, w);
+            ExportConfig exportConfig = createExportConfig();
+            DataWriter writer = JSON.createDataWriter(causeAction, w, exportConfig);
             Model<CauseAction> model = new ModelBuilder().get(CauseAction.class);
             model.writeTo(causeAction, writer);
             // return a slightlly cleaner object by removing the outer object
@@ -169,7 +179,8 @@ public final class RunWrapper implements Serializable {
             if (className.equals(cause.getClass().getName())) {
                 StringWriter w = new StringWriter();
                 CauseAction causeAction = new CauseAction(cause);
-                DataWriter writer = JSON.createDataWriter(causeAction, w);
+                ExportConfig exportConfig = createExportConfig();
+                DataWriter writer = JSON.createDataWriter(causeAction, w, exportConfig);
                 Model<CauseAction> model = new ModelBuilder().get(CauseAction.class);
                 model.writeTo(causeAction, writer);
                 // return a slightly cleaner object by removing the outer object
@@ -354,6 +365,29 @@ public final class RunWrapper implements Serializable {
                 return Collections.emptyList();
             }
         }
+    }
+
+    /**
+     * Management of known issue for serialization.
+     */
+    private static class RunWrapperExportInterceptor extends ExportInterceptor {
+
+        @Override
+        public Object getValue(Property property, Object model, ExportConfig config) throws IOException {
+
+            if(model instanceof JSONNull){
+                return null;
+            } else if (model instanceof Item || model instanceof Run) {
+                // We should skip any models that are Jenkins Item or Run objects as these are known to be evil
+                return SKIP;
+            }
+            return ExportInterceptor.DEFAULT.getValue(property, model, config);
+        }
+
+    }
+
+    private static ExportConfig createExportConfig() {
+        return new ExportConfig().withExportInterceptor(new RunWrapperExportInterceptor()).withSkipIfFail(false);
     }
 
 }
