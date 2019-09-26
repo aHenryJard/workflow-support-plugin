@@ -59,6 +59,7 @@ import org.kohsuke.stapler.export.Exported;
 import org.kohsuke.stapler.export.ExportedBean;
 import net.sf.json.JSONArray;
 import net.sf.json.JSONObject;
+import net.sf.json.JsonConfig;
 
 @Issue("JENKINS-26834")
 public class RunWrapperTest {
@@ -332,27 +333,47 @@ public class RunWrapperTest {
 
                 job.setDefinition(new CpsFlowDefinition("echo currentBuild.getBuildCauses().toString()\n"
                                                         + "assert currentBuild.getBuildCauses().size() == 1\n"
-                                                        + "echo currentBuild.getBuildCauses()[0]\n",
+                                                        + "echo currentBuild.getBuildCauses()[0].toString()\n"
+                                                        + "assert currentBuild.getBuildCauses()[0].event.source"
+                                                        + ".toString() == 'github'",
                                                         true));
 
                 //WHEN the build run THEN it succeed
                 r.j.assertBuildStatusSuccess(job.scheduleBuild2(0,new CauseAction(new CustomCauseWithJson(embeddedJson))));
-
-
-                // GIVEN a job with a custom cause with a json field, including a null
-                String embeddedJsonWithNull = "{ source: 'bitbucket', optional: 'null' }";
-
-                //WHEN the build run THEN it succeed
-                r.j.assertBuildStatusSuccess(job.scheduleBuild2(0,
-                                                                new CauseAction(new CustomCauseWithJson(embeddedJsonWithNull))));
-
 
             }
         });
 
     }
 
-    public static class CustomCauseWithJson extends Cause implements CustomExportedBean {
+
+    @Test
+    public void customCauseWithJsonFieldNullCanBeUsedOnPipelines(){
+
+        r.addStep(new Statement() {
+            @Override
+            public void evaluate() throws Throwable {
+
+                // GIVEN a job with a custom cause with a json field
+                String embeddedJsonWithNull = "{ source: 'bitbucket', optional: null }";
+                WorkflowJob job = r.j.createProject(WorkflowJob.class, "my-workflow");
+
+                job.setDefinition(new CpsFlowDefinition("echo currentBuild.getBuildCauses().toString()\n"
+                                                        + "assert currentBuild.getBuildCauses().size() == 1\n"
+                                                        + "echo currentBuild.getBuildCauses()[0].toString()\n"
+                                                        + "assert currentBuild.getBuildCauses()[0].event.source.toString() == 'bitbucket'",
+                                                        true));
+
+                //WHEN the build run THEN it succeed
+                r.j.assertBuildStatusSuccess(job.scheduleBuild2(0,new CauseAction(new CustomCauseWithJson(embeddedJsonWithNull))));
+
+            }
+        });
+
+    }
+
+    @ExportedBean
+    public static class CustomCauseWithJson extends Cause /*implements CustomExportedBean*/ {
 
         private String event;
 
@@ -365,15 +386,24 @@ public class RunWrapperTest {
             return "Custom class";
         }
 
+       /* @Exported(visibility = 3)
+        public String getEvent() {
+            return event;
+        }*/
+
         @Exported(visibility = 3)
         public JSONObject getEvent() {
-            return JSONObject.fromObject(event);
+            JsonConfig jsonConfig = new JsonConfig();
+            jsonConfig.setAllowNonStringKeys(true);
+
+            return JSONObject.fromObject(event/*,jsonConfig*/);
         }
 
-        @Override
-        public Object toExportedObject() {
-            return JSONObject.fromObject(this).toString();
-        }
+        /*@Override
+        public JSONObject toExportedObject() {
+            String jsonString = JSONObject.fromObject(this).toString();
+            return JSONObject.fromObject(jsonString);
+        }*/
     }
 
 

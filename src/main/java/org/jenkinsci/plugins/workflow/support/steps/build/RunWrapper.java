@@ -53,6 +53,7 @@ import jenkins.scm.RunWithSCM;
 import net.sf.json.JSONArray;
 import net.sf.json.JSONNull;
 import net.sf.json.JSONObject;
+import net.sf.json.JsonConfig;
 import org.jenkinsci.plugins.scriptsecurity.sandbox.whitelists.Whitelisted;
 import org.jenkinsci.plugins.workflow.support.actions.EnvironmentAction;
 import org.kohsuke.stapler.export.DataWriter;
@@ -157,7 +158,10 @@ public final class RunWrapper implements Serializable {
             Model<CauseAction> model = new ModelBuilder().get(CauseAction.class);
             model.writeTo(causeAction, writer);
             // return a slightlly cleaner object by removing the outer object
-            result.add(JSONObject.fromObject(w.toString()).getJSONArray("causes").get(0));
+            //JsonConfig jsonConfig = new JsonConfig();
+            //jsonConfig.setAllowNonStringKeys(true); //this option avoid to convert null to JSONNull
+
+            result.add(JSONObject.fromObject(w.toString()).getJSONArray("causes").get(0)/*,jsonConfig*/);
         }
         return result;
     }
